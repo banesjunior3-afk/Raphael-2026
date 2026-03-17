@@ -346,4 +346,122 @@ if len(apoiadores) > 0:
 else:
     st.info("Nenhum apoiador cadastrado ainda. Acesse a planilha acima para começar.")
 
+
+# ── DELEGACIAS CRO-MG ────────────────────────────────────
+st.markdown("---")
+st.subheader("🏛️ Cobertura por Delegacia Regional CRO-MG")
+
+@st.cache_data(ttl=300)
+def carregar_delegacias():
+    url = "https://raw.githubusercontent.com/banesjunior3-afk/Raphael-2026/main/base_delegacias_raphael.csv"
+    return pd.read_csv(url)
+
+df_deleg = carregar_delegacias()
+
+# Cruza com apoiadores para calcular cobertura
+if "Municipio" in apoiadores.columns and len(apoiadores) > 0:
+    apo_deleg = apoiadores.copy()
+    apo_deleg["CIDADE_NORM"] = apo_deleg["Municipio"].str.upper().str.strip()
+    apo_deleg = apo_deleg.merge(
+        base_mapa[["CIDADE_NORM","DELEGACIA_CRO"]],
+        on="CIDADE_NORM", how="left"
+    )
+    cobertura = apo_deleg.groupby("DELEGACIA_CRO").agg(
+        APOIADORES_REAL=("Nome do Apoiador","count"),
+        VOTOS_PROMETIDOS_REAL=("Votos Prometidos","sum")
+    ).reset_index()
+    df_deleg = df_deleg.merge(cobertura, on="DELEGACIA_CRO", how="left")
+else:
+    df_deleg["APOIADORES_REAL"]      = 0
+    df_deleg["VOTOS_PROMETIDOS_REAL"] = 0
+
+df_deleg["APOIADORES_REAL"]       = df_deleg["APOIADORES_REAL"].fillna(0).astype(int)
+df_deleg["VOTOS_PROMETIDOS_REAL"] = df_deleg["VOTOS_PROMETIDOS_REAL"].fillna(0).astype(int)
+
+# Score de cobertura — apoiadores vs potencial
+df_deleg["PCT_COBERTURA"] = (
+    df_deleg["APOIADORES_REAL"] /
+    (df_deleg["MUNICIPIOS"] * 0.1).clip(lower=1)
+).clip(upper=1).mul(100).round(1)
+
+# Cor por cobertura
+def cor_cobertura(pct):
+    if pct >= 60:   return "🟢 Alta"
+    elif pct >= 30: return "🟡 Média"
+    elif pct >= 10: return "🟠 Baixa"
+    else:           return "🔴 Crítica"
+
+df_deleg["STATUS"] = df_deleg["PCT_COBERTURA"].apply(cor_cobertura)
+
+df_deleg_sorted = df_deleg[df_deleg["DELEGACIA_CRO"] != "Não mapeado"].sort_values("POTENCIAL", ascending=False)
+
+# Gráfico de barras — cobertura vs potencial
+fig_deleg = go.Figure()
+
+fig_deleg.add_trace(go.Bar(
+    name="Potencial (dentistas)",
+    x=df_deleg_sorted["DELEGACIA_CRO"],
+    y=df_deleg_sorted["TOTAL_DENTISTAS"],
+    marker_color="#002868",
+    opacity=0.85
+))
+
+fig_deleg.add_trace(go.Bar(
+    name="Apoiadores cadastrados",
+    x=df_deleg_sorted["DELEGACIA_CRO"],
+    y=df_deleg_sorted["APOIADORES_REAL"] * 50,
+    marker_color="#FFD700",
+    opacity=0.95,
+    text=df_deleg_sorted["APOIADORES_REAL"],
+    textposition="outside",
+    textfont=dict(color="#002868", size=11)
+))
+
+fig_deleg.update_layout(
+    barmode="overlay",
+    paper_bgcolor="white",
+    plot_bgcolor="#f8f9fa",
+    height=400,
+    margin=dict(l=10,r=10,t=20,b=80),
+    xaxis=dict(tickangle=-30, color="#333"),
+    yaxis=dict(color="#333", gridcolor="#eee", title="Dentistas"),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="white"),
+    font=dict(family="Arial")
+)
+st.plotly_chart(fig_deleg, use_container_width=True)
+
+st.markdown("""
+<div class='card-info'>
+🏛️ <b>Como ler:</b> As barras <b>azuis</b> mostram o potencial de cada regional (total de dentistas).
+As barras <b>amarelas</b> mostram quantos apoiadores já foram cadastrados naquela regional.
+Regionais com barra azul alta e amarela baixa são <b>oportunidades urgentes</b>.
+</div>
+""", unsafe_allow_html=True)
+
+# Tabela de status por delegacia
+st.markdown("##### 📋 Status por Delegacia")
+tabela_deleg = df_deleg_sorted[[
+    "DELEGACIA_CRO","MUNICIPIOS","TOTAL_DENTISTAS",
+    "TOTAL_VOTOS_PL","TIER_A","APOIADORES_REAL",
+    "VOTOS_PROMETIDOS_REAL","STATUS"
+]].rename(columns={
+    "DELEGACIA_CRO":"Delegacia",
+    "MUNICIPIOS":"Municípios",
+    "TOTAL_DENTISTAS":"Dentistas",
+    "TOTAL_VOTOS_PL":"Votos PL/Nikolas",
+    "TIER_A":"Tier A",
+    "APOIADORES_REAL":"Apoiadores",
+    "VOTOS_PROMETIDOS_REAL":"Votos Prometidos",
+    "STATUS":"Cobertura"
+})
+st.dataframe(tabela_deleg, use_container_width=True, hide_index=True)
+
+st.markdown("""
+<div class='card-info'>
+🎯 <b>Prioridade de ativação:</b> Foque primeiro nas regionais com <b>🔴 Crítica</b> e <b>🟠 Baixa</b> cobertura
+que tenham alto número de dentistas — são onde cada novo apoiador tem maior impacto.
+À medida que cadastrar apoiadores na planilha, o status atualiza automaticamente.
+</div>
+""", unsafe_allow_html=True)
+
 st.markdown('<hr style="border:none;border-top:1px solid #e0e0e0;margin:30px 0 10px 0;"><p style="text-align:center;color:#aaa;font-size:0.8rem;">Dashboard desenvolvido por Banes Júnior · Dados TSE + CFO/CRO-MG · 2026</p>', unsafe_allow_html=True)
