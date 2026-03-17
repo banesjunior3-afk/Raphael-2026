@@ -24,7 +24,7 @@ div[data-testid="stMetric"] {
 }
 div[data-testid="stMetric"] label { color: #002868 !important; font-weight: 700; font-size: 0.85rem; }
 div[data-testid="stMetric"] [data-testid="stMetricValue"] { color: #1a1a2e !important; font-size: 1.8rem !important; font-weight: 800; }
-div[data-testid="stMetric"] [data-testid="stMetricDelta"] { color: #FFD700 !important; font-weight: 600; }
+div[data-testid="stMetric"] [data-testid="stMetricDelta"] { color: #28a745 !important; font-weight: 600; }
 
 /* Botões */
 .stButton > button {
